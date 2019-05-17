@@ -127,7 +127,7 @@ class SpectralNorm(object):
         with torch.no_grad():
             shape = (1,weight.shape[1])
             for i in range(0,len(weight.shape)-2):
-                shape += (max(k[i]*d[i]-p[i],1),)
+                shape += (max(k[i]*d[i],1)+4,)
             u = torch.randn(shape).to(weight.device)
             
 
