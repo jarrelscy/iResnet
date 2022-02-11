@@ -6,6 +6,68 @@ from torch.nn.functional import normalize
 from torch.nn.parameter import Parameter
 import torch.nn.functional as F
 
+
+class forward_function:
+    def __init__(self, weight):
+        self.weight = weight
+    def __call__(self, inp, weight=None):
+        if weight is None:
+            weight = self.weight
+        return F.linear(input, weight)
+
+class iteration_function:
+    def __init__(self, weight):
+        self.weight = weight
+    def __call__(self, inp, weight=None):
+        if weight is None:
+            weight = self.weight
+        return F.linear(F.linear(inp, weight), weight.transpose(1,0))
+
+class forward_function2:
+    def __init__(self, functions, weight, s, g, d, p):
+        self.weight = weight
+        self.s = s
+        self.g = g
+        self.d = d
+        self.p = p
+        self.functions = functions
+
+    def __call__(self, inp, weight=None, s=None, g=None, d=None, p=None):
+        if weight is None:
+            weight = self.weight
+        if s is None:
+            s = self.s
+        if g is None:
+            g = self.g
+        if d is None:
+            d = self.d
+        if p is None:
+            p = self.p
+        return self.functions[0](inp, weight, stride=s, padding=p, dilation=d, groups=g)
+
+class iteration_function2:
+    def __init__(self, functions, weight, s, g, d, p):
+        self.weight = weight
+        self.s = s
+        self.g = g
+        self.d = d
+        self.p = p
+        self.functions = functions
+
+    def __call__(self, inp, weight=None, s=None, g=None, d=None, p=None):
+        if weight is None:
+            weight = self.weight
+        if s is None:
+            s = self.s
+        if g is None:
+            g = self.g
+        if d is None:
+            d = self.d
+        if p is None:
+            p = self.p
+        return self.functions[1](self.functions[0](inp, weight, stride=s, padding=p, dilation=d, groups=g), 
+               weight, stride=s, padding=p, dilation=d, groups=g)
+
 class SpectralNorm(object):
     # Invariant before and after each forward call:
     #   u = normalize(W @ v)
@@ -76,8 +138,8 @@ class SpectralNorm(object):
             }
         
         if isinstance(module, torch.nn.Linear):  
-            module.forward_function = lambda inp,weight=weight: F.linear(inp, weight)
-            module.iteration_function = lambda inp,weight=weight: F.linear(F.linear(inp, weight), weight.transpose(1,0))
+            module.forward_function = forward_function(weight)
+            module.iteration_function = iteration_function(weight)
         elif isinstance(module, (torch.nn.ConvTranspose1d,
                                torch.nn.ConvTranspose2d,
                                torch.nn.ConvTranspose3d,
@@ -90,9 +152,8 @@ class SpectralNorm(object):
             d = module.dilation
             p = module.padding
             functions = functions_dict[module.__class__ ]
-            module.forward_function = lambda inp,weight=weight,s=s,g=g,d=d,p=p: functions[0](inp, weight, stride=s, padding=p, dilation=d, groups=g)            
-            module.iteration_function = lambda inp,weight=weight,s=s,g=g,d=d,p=p: functions[1](functions[0](inp, weight, stride=s, padding=p, dilation=d, groups=g), 
-                                                                                             weight, stride=s, padding=p, dilation=d, groups=g)
+            module.forward_function = forward_function2(functions, weight, s, g, d, p)
+            module.iteration_function = iteration_function2(functions, weight, s, g, d, p)
             
             
         with torch.no_grad():
